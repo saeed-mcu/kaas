@@ -1,0 +1,263 @@
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: openstack-cloud-controller-manager
+  namespace: kamaji-system
+spec:
+  clusterSelector:
+    matchLabels:
+      addons.cluster.x-k8s.io/ccm: "true"
+  repoURL: https://kubernetes.github.io/cloud-provider-openstack
+  chartName: openstack-cloud-controller-manager
+  version: 2.30.1
+  namespace: kube-system
+  releaseName: openstack-cloud-controller-manager
+  options:
+    enableClientCache: false
+    timeout: 10m0s
+    install:
+      createNamespace: true
+    upgrade:
+      maxHistory: 10
+  valuesTemplate: |
+    secret:
+      enabled: false
+      create: false
+
+    nodeSelector: null
+
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node.cloudprovider.kubernetes.io/uninitialized
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+      - key: node.kubernetes.io/not-ready
+        operator: Exists
+        effect: NoSchedule
+      - key: node.cluster.x-k8s.io/uninitialized
+        operator: Exists
+        effect: NoSchedule
+
+    podSecurityContext:
+      runAsUser: 0
+
+    dnsPolicy: Default
+
+    extraVolumes:
+      - name: cloud-config
+        hostPath:
+          path: /etc/kubernetes/cloud.conf
+          type: File
+      - name: k8s-certs
+        hostPath:
+          path: /etc/kubernetes/pki
+
+    extraVolumeMounts:
+      - name: cloud-config
+        mountPath: /etc/config/cloud.conf
+        readOnly: true
+      - name: k8s-certs
+        mountPath: /etc/kubernetes/pki
+        readOnly: true
+---
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: cilium
+  namespace: kamaji-system
+spec:
+  clusterSelector:
+    matchLabels:
+      addons.cluster.x-k8s.io/cilium: "true"
+  repoURL: https://helm.cilium.io
+  chartName: cilium
+  version: 1.18.4
+  namespace: kube-system
+  releaseName: cilium
+  options:
+    enableClientCache: false
+    timeout: 10m0s
+    install:
+      createNamespace: true
+    upgrade:
+      maxHistory: 10
+  valuesTemplate: |
+    cni:
+      chainingMode: portmap
+
+    prometheus:
+      enabled: false
+
+    operator:
+      replicas: 1
+      prometheus:
+        enabled: false
+
+    ipam:
+      operator:
+        clusterPoolIPv4PodCIDRList:
+          - "10.244.0.0/16"
+        clusterPoolIPv4MaskSize: 24
+
+    kubeProxyReplacement: false
+    sessionAffinity: true
+
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node.cloudprovider.kubernetes.io/uninitialized
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+      - key: node.kubernetes.io/not-ready
+        operator: Exists
+        effect: NoSchedule
+---
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: openstack-cinder-csi
+  namespace: kamaji-system
+spec:
+  clusterSelector:
+    matchLabels:
+      addons.cluster.x-k8s.io/cinder-csi: "true"
+  repoURL: https://kubernetes.github.io/cloud-provider-openstack
+  chartName: openstack-cinder-csi
+  version: 2.31.7
+  namespace: kube-system
+  releaseName: openstack-cinder-csi
+  options:
+    enableClientCache: false
+    timeout: 10m0s
+    install:
+      createNamespace: true
+    upgrade:
+      maxHistory: 10
+  valuesTemplate: |
+    csi:
+      plugin:
+        nodePlugin:
+          dnsPolicy: Default
+        controllerPlugin:
+          dnsPolicy: Default
+          nodeSelector: null
+          tolerations:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
+              effect: NoSchedule
+            - key: node.cloudprovider.kubernetes.io/uninitialized
+              operator: Equal
+              value: "true"
+              effect: NoSchedule
+            - key: node.kubernetes.io/not-ready
+              operator: Exists
+              effect: NoSchedule
+            - key: CriticalAddonsOnly
+              operator: Exists
+            - key: node.cluster.x-k8s.io/uninitialized
+              operator: Exists
+              effect: NoSchedule
+
+    secret:
+      enabled: false
+      create: false
+      hostMount: true
+      filename: cloud.conf
+
+    storageClass:
+      enabled: false
+      custom: |-
+        ---
+        apiVersion: storage.k8s.io/v1
+        kind: StorageClass
+        metadata:
+          annotations:
+            storageclass.kubernetes.io/is-default-class: "true"
+          labels:
+            name: cinder-ssd
+          name: cinder-ssd
+        allowVolumeExpansion: true
+        provisioner: cinder.csi.openstack.org
+        reclaimPolicy: Delete
+        volumeBindingMode: Immediate
+        parameters:
+          type: RBD_SSD
+        ---
+        apiVersion: storage.k8s.io/v1
+        kind: StorageClass
+        metadata:
+          labels:
+            name: cinder-hdd
+          name: cinder-hdd
+        allowVolumeExpansion: true
+        provisioner: cinder.csi.openstack.org
+        reclaimPolicy: Delete
+        volumeBindingMode: Immediate
+        parameters:
+          type: RBD_HDD
+        ---
+        apiVersion: storage.k8s.io/v1
+        kind: StorageClass
+        metadata:
+          labels:
+            name: cinder-san
+          name: cinder-san
+        allowVolumeExpansion: true
+        provisioner: cinder.csi.openstack.org
+        reclaimPolicy: Delete
+        volumeBindingMode: Immediate
+        parameters:
+          type: SAN
+
+---
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: cert-manager
+  namespace: kamaji-system
+spec:
+  clusterSelector:
+    matchLabels:
+      addons.cluster.x-k8s.io/cert-manager: "true"
+  repoURL: https://charts.jetstack.io
+  chartName: cert-manager
+  namespace: cert-manager
+  releaseName: cert-manager
+  options:
+    enableClientCache: false
+    timeout: 10m0s
+    install:
+      createNamespace: true
+    upgrade:
+      maxHistory: 10
+  valuesTemplate: |
+    installCRDs: true
+---
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: kamaji
+  namespace: kamaji-system
+spec:
+  clusterSelector:
+    matchLabels:
+      addons.cluster.x-k8s.io/kamaji: "true"
+  repoURL: https://clastix.github.io/charts
+  chartName: kamaji
+  version: 0.0.0+latest
+  namespace: kamaji-system
+  releaseName: kamaji
+  options:
+    enableClientCache: false
+    timeout: 10m0s
+    install:
+      createNamespace: true
+    upgrade:
+      maxHistory: 10
+  valuesTemplate: |
+    resources: null

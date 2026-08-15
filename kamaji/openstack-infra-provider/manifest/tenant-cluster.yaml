@@ -1,0 +1,160 @@
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: tenant-cluster
+  namespace: kamaji-system
+  labels:
+    addons.cluster.x-k8s.io/ccm: "true"
+    addons.cluster.x-k8s.io/cilium: "true"
+    addons.cluster.x-k8s.io/cinder-csi: "true"
+spec:
+  clusterNetwork:
+    services:
+      cidrBlocks:
+      - 10.96.0.0/12
+    pods:
+      cidrBlocks:
+      - 10.244.0.0/16
+    serviceDomain: cluster.local
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1alpha2
+    kind: KamajiControlPlane
+    name: tenant-cluster
+    namespace: kamaji-system
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: OpenStackCluster
+    name: tenant-cluster
+    namespace: kamaji-system
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1alpha2
+kind: KamajiControlPlane
+metadata:
+  name: tenant-cluster
+  namespace: kamaji-system
+spec:
+  version: v1.36.1
+  dataStoreName: default
+  replicas: 1
+  #apiServer:
+  #  extraArgs:
+  #  - --cloud-provider=external
+  controllerManager:
+    extraArgs:
+    - --cloud-provider=external
+  kubelet:
+    cgroupfs: systemd
+    preferredAddressTypes:
+    - InternalIP
+    configurationJSONPatches:
+    - op: remove
+      path: /imagePullCredentialsVerificationPolicy
+    - op: remove
+      path: /mergeDefaultEvictionSettings
+    - op: remove
+      path: /crashLoopBackOff
+    - op: add
+      path: /cgroupDriver
+      value: systemd
+  network:
+    serviceType: LoadBalancer
+  addons:
+    coreDNS: {}
+    kubeProxy: {}
+    konnectivity: {}
+  deployment:
+    externalClusterReference:
+      deploymentNamespace: kamaji-system
+      kubeconfigSecretName: kamaji-cp-kubeconfig
+      kubeconfigSecretKey: value
+      kubeconfigSecretNamespace: kamaji-system
+  # Add for error: unable to determine control plane endpoint
+  controlPlaneEndpoint:
+    host: 172.16.139.174
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackCluster
+metadata:
+  name: tenant-cluster
+  namespace: kamaji-system
+spec:
+  apiServerLoadBalancer:
+    enabled: false
+  disableAPIServerFloatingIP: true
+  externalNetwork:
+    id: ce4fe159-252e-4f1d-a81a-87653063f922
+  identityRef:
+    cloudName: openstack-stage
+    name: tenant-cluster
+  managedSecurityGroups:
+    allowAllInClusterTraffic: true
+  managedSubnets:
+  - cidr: 10.0.0.0/24
+    dnsNameservers: [172.16.131.11 ,172.16.131.12, 172.16.140.2]
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+kind: KubeadmConfigTemplate
+metadata:
+  name: tenant-cluster-bootstrap
+  namespace: kamaji-system
+spec:
+  template:
+    spec:
+      format: cloud-config
+      files:
+      - path: /etc/kubernetes/cloud.conf
+        owner: root:root
+        permissions: "0600"
+        encoding: base64
+        content: W0dsb2JhbF0KYXV0aC11cmw9aHR0cHM6Ly9pYWFzLXZwLWludGVybmFsLmRpZ2ljbG91ZC5pcjo1MDAwL3YzCmFwcGxpY2F0aW9uLWNyZWRlbnRpYWwtaWQ9OThiNGI0MTNlYTY1NGUzNzkwYTYyMzBiY2I0YWM5NTQKYXBwbGljYXRpb24tY3JlZGVudGlhbC1zZWNyZXQ9MjIzZDVlOTliNWI1ODkyMDcwNDcwNGYwCnJlZ2lvbj1pci12YW5hay1wbGF6YQp0bHMtaW5zZWN1cmU9dHJ1ZQppbnRlcmZhY2U9cHVibGljCmlkZW50aXR5LWFwaS12ZXJzaW9uPTMKYXV0aC10eXBlPXYzYXBwbGljYXRpb25jcmVkZW50aWFs
+      joinConfiguration:
+        nodeRegistration:
+          imagePullPolicy: IfNotPresent
+          kubeletExtraArgs:
+            cloud-provider: external
+          name: '{{ local_hostname }}'
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackMachineTemplate
+metadata:
+  name: tenant-cluster-worker
+  namespace: kamaji-system
+spec:
+  template:
+    spec:
+      flavor: g1.xlarge
+      image:
+        filter:
+          name: ubuntu-26.04-kube-v1.36.1
+      sshKeyName: compute-team
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: tenant-cluster-md-0
+  namespace: kamaji-system
+spec:
+  clusterName: tenant-cluster
+  replicas: 1
+  selector:
+    matchLabels:
+      nodepool: worker
+  template:
+    metadata:
+      labels:
+        nodepool: worker
+    spec:
+      clusterName: tenant-cluster
+      version: v1.36.1
+      bootstrap:
+        configRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          kind: KubeadmConfigTemplate
+          name: tenant-cluster-bootstrap
+          namespace: kamaji-system
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+        kind: OpenStackMachineTemplate
+        name: tenant-cluster-worker
+        namespace: kamaji-system
