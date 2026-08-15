@@ -25,6 +25,32 @@ Worker nodes may be remote from the management cluster: architecture allows you 
 
 We rely on Konnectivity, an optional component of the Kubernetes control plane, for remote connectivity. The worker nodes communicate outbound to the API-server via the Konnectivity Agent running on each worker, so the Control Plane does not need inbound connectivity into arbitrary worker nodes. This significantly simplifies firewall and topology concerns while helping preserve latency and connection performance even when worker nodes are geographically dispersed.
 
+```
+                    Management / Host Cluster
+                 ┌──────────────────────────────┐
+                 │                              │
+                 │   HCP / Control Plane layer  │
+                 │   ┌────────────────────────┐ │
+                 │   │ kube-apiserver         │ │
+                 │   │ controller-manager     │ │
+                 │   │ scheduler              │ │
+                 │   │ etcd                   │ │
+                 │   └────────────────────────┘ │
+                 │                              │
+                 │   Cluster lifecycle          │
+                 │   └── Cluster API (CAPI)     │
+                 │                              │
+                 └──────────────┬───────────────┘
+                                │
+                         OpenStack API
+                                │
+                    ┌───────────▼───────────┐
+                    │       OpenStack       │
+                    │                       │
+                    │   Worker/Data Plane   │
+                    │   VMs / Networks      │
+                    └───────────────────────┘
+```
 ## How to
 ### 01 Install KIND
 Run Kamaji on kind only for development or learning purposes. [Kind Installation](./docs/01.KIND.md)
